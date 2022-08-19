@@ -1,0 +1,514 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+
+QUESTION 1
+
+This block tests my method on a double integral which I know the solution to to see if my method works.
+```{r}
+# Clearing Workspace before each question to keep it tidy
+rm(list = ls())
+set.seed(56473)
+nSamples = 10^6
+
+# Generating 2 samples of standard uniform random variables 
+U1 <- runif(nSamples)
+U2 <- runif(nSamples)
+
+# Standard MC Estimator
+X = sin(U1)*sin(U2)
+
+# Creating my control variables
+Y1 <- 0.5-U1
+Y2 <- 0.5-U2
+
+# Calculating the constant c that minimizes the variance of my estimate
+c1 = -12*cov(X,Y1)
+c2 = -12*cov(X,Y2)
+
+# Calculating my control estimator
+control_Variate = X + c1*Y1 + c2*Y2
+
+# This is the true closed-form value of the double integral
+true_value = (1-cos(1))^2
+
+MC_soln = mean(X)
+Control_soln = mean(control_Variate)
+
+MC_var = var(X)/nSamples
+Control_var = var(control_Variate)/nSamples
+
+cbind(true_value, MC_soln, Control_soln)
+cbind(MC_var, Control_var)
+```
+Since the MC solution and the Control variate gives us a very good estimation of the double-integral, I can confirm the method works hence I can now apply it to the unknown integral in the problem.
+
+```{r}
+rm(list = ls())
+set.seed(56473)
+nSamples = 10^6
+
+U1 <- runif(nSamples)
+U2 <- runif(nSamples)
+
+Y1 <- 0.5-U1
+Y2 <- 0.5-U2
+
+X = sin(sqrt(U1*U2))
+
+c1 = -12*cov(X,Y1)
+c2 = -12*cov(X,Y2)
+
+control_estimator = X + c1*Y1 + c2*Y2
+
+MC_soln = mean(X)
+Control_soln = mean(control_estimator)
+
+MC_var = var(X)/nSamples
+Control_var = var(control_estimator)/nSamples
+
+# Calculating the 95% Confidence Interval for my MC estimation
+lower = Control_soln - 1.96*sqrt(Control_var)
+upper = Control_soln + 1.96*sqrt(Control_var)
+
+cbind(MC_soln, MC_var)
+cbind(Control_soln, Control_var, lower, upper)
+```
+
+QUESTION 2
+
+```{r}
+rm(list = ls()) 
+set.seed(56473)
+nSamples = 10^6
+
+# Defining function that returns the score of the selected candidate for given parameters k and N
+f_uniform <- function(k, N, a) {
+  X <- runif(k)  # Generating Scores of the first k candidates that will be rejected
+  Y <- runif(N-k)  #  Generating scores of the potential successful candidates
+  
+  # The following IF statement determines who is the selected candidate
+  if (max(Y)>max(X)){
+    winner = min(which(Y>max(X)))
+  } else  {
+    winner = N-k
+  }
+
+  # Retrieving the score of the selected candidate
+  score = Y[winner]
+  return(score)
+}
+```
+
+The next block finds the optimal k which maximises the expectation of the score.
+
+```{r}
+k = 1:11
+X = c()
+
+for (i in k) {
+  # Calculating the average score for each value of k for a sample size of nSamples (and fixing N = 12)
+  X[i] = mean(sapply(1:nSamples, f_uniform, k=i, N=12))
+}
+
+X
+max_expectation = max(X)
+optimal_k = which.max(X)
+```
+
+The following block investigates the effects of changing the number of candidates. 
+
+```{r}
+# Lets now relax the value of N and fix k = optimal_k
+N = 10:18
+Y = c()
+
+for (i in N) {
+  # Calculating the average score for each value of N (and fixing k = optimal_k)
+  Y[i-9] = mean(sapply(1:nSamples, f_uniform, k=optimal_k, N=i))
+}
+
+Y
+max_expectation_part2 = max(Y)
+optimal_N = which.max(Y) + 9
+
+# For optimal k and optimal N, the average score is the following
+Optimal_expectation = Y[optimal_N-9]
+
+cbind(optimal_k, optimal_N, Optimal_expectation)
+```
+In coursework 1, the distribution does not matter since we only care about whether we achieve the maximum or not. However, for this question we are interested in the actual score as we are trying to maximise the expectation.For a higher expected score, we want distributions that are tilted towards the higher end whereas uniform is not tilted in any direction, it is symmetric around the mean.
+
+
+INVESTIGATING DIFFERENT DISTRIBUTIONS 
+
+```{r}
+rm(list = ls()) 
+set.seed(56473)
+nSamples = 10^6
+
+f_beta <- function(k, N, a) {
+  # This time I have used the beta(5,1) distribution
+  X <- rbeta(k,5,1)
+  Y <- rbeta(N-k,5,1)
+  
+  # The following IF statement determines who is the selected candidate
+  if (max(Y)>max(X)){
+    winner = min(which(Y>max(X)))
+  } else  {
+    winner = N-k
+  }
+  
+  score = Y[winner]
+  return(score)
+}
+
+```
+
+```{r}
+k = 1:11
+X = c()
+
+for (i in k) {
+  X[i] = mean(sapply(1:nSamples, f_beta, k=i, N=12))
+}
+
+X
+
+max_expectation = max(X)
+optimal_k = which.max(X)
+```
+
+
+```{r}
+# Lets now relax the value of N and fix k = optimal_k
+N = 10:18
+Y = c()
+
+for (i in N) {
+  Y[i-9] = mean(sapply(1:nSamples, f_beta, k=optimal_k, N=i))
+}
+
+Y
+
+max_expectation_part2 = max(Y)
+optimal_N = which.max(Y) + 9
+
+# For optimal k and optimal N, the probability of choosing the correct candidate is...
+Optimal_expectation = Y[optimal_N-9]
+cbind(optimal_k, optimal_N, Optimal_expectation)
+```
+Since the beta(5,1) distribution is much more tilted towards 1 (higher values), it is expected to see much higher expected scores. This shows that the choice of distribution matters in this case since we care about the scores itself and not just the probability of achieving the highest score.
+
+
+
+Question 3
+
+```{r}
+rm(list = ls()) 
+set.seed(56473)
+nSamples = 10^6
+
+r=0.18
+S0 = 100
+
+# This function returns the series of stock prices for all 50 periods in a year and the sum of the brownian motions
+stock_price <- function(a) {
+  Z = rnorm(50, 0, sqrt(1/50))
+  B = cumsum(Z)
+  S = 100*exp(0.6*B)  
+  W = B[50]
+  
+  S = append(S, W)
+  return(S)
+}
+
+Results= sapply(1:nSamples, stock_price)
+
+S_prices = Results[-51,]
+ST = S_prices[50,]
+W = Results[51,]
+
+S_mean = colMeans(S_prices) # Calculating the mean stock price over the entire period for each sample
+S_median = apply(S_prices,2,median) # Calculating the median stock price over the entire period for each sample
+```
+
+Now repeating for different strike prices b
+
+```{r}
+# Defining a function that returns the price of an asian option for different strike prices
+f_asian <- function(x) {
+  payoffs_asian = pmax(S_mean - x, 0)
+  asian_price = exp(-r*1)*mean(payoffs_asian)
+  asian_variance = var(payoffs_asian)/nSamples
+  
+  Y = c(asian_price,asian_variance)
+  return(Y)
+}
+
+# Defining a function that returns the price of a quantile option for different strike prices
+f_quantile <- function(x) {
+  payoffs_quantile = pmax(S_median - x, 0)
+  quantile_price = exp(-r*1)*mean(payoffs_quantile)
+  quantile_variance = var(payoffs_quantile)/nSamples
+  
+  Y = c(quantile_price,quantile_variance)
+  return(Y)
+}
+```
+
+
+```{r}
+# This is the range of strike prices I am testing for
+b = c(70,80,90,100,110,120,130)
+
+asian <- sapply(b, f_asian)
+quantile <- sapply(b, f_quantile)
+
+Asian_price = asian[1,]
+Asian_var = asian[2,]
+Quantile_price = quantile[1,]
+Quantile_var = quantile[2,]
+
+
+data.frame(Asian_price, Asian_var, Quantile_price, Quantile_var)
+
+```
+
+The next block applies control variable 1
+
+```{r}
+f_asian_control <- function(x) {
+  payoffs_asian = pmax(S_mean - x, 0)
+  b = cov(payoffs_asian, exp(-r*1)*ST)/var(exp(-r*1)*ST)
+  
+  control = exp(-r*1)*payoffs_asian - b*(exp(-r*1)*ST-100)
+  
+  asian_price = mean(control)
+  asian_var = var(control)/nSamples
+  
+  Y = c(asian_price, asian_var)
+  return(Y)
+}
+
+f_quantile_control <- function(x) {
+  payoffs_quantile = pmax(S_median - x, 0)
+  b = cov(payoffs_quantile, exp(-r*1)*ST)/var(exp(-r*1)*ST)
+  
+  control = exp(-r*1)*payoffs_quantile- b*(exp(-r*1)*ST-100)
+  
+  quantile_price = mean(control)
+  quantile_var = var(control)/nSamples
+  
+  Y = c(quantile_price, quantile_var)
+  return(Y)
+}
+
+asian_control1 <- sapply(b, f_asian_control)
+quantile_control1 <- sapply(b, f_quantile_control)
+
+Asian_price_control1 = asian_control1[1,]
+Asian_var_control1 = asian_control1[2,]
+Quantile_price_control1 = quantile_control1[1,]
+Quantile_var_control1 = quantile_control1[2,]
+
+
+data.frame(Asian_price_control1, Asian_var_control1, Quantile_price_control1, Quantile_var_control1)
+```
+
+The next block carries out control variable 2
+
+```{r}
+f_asian_control2 <- function(x) {
+  payoffs_asian = pmax(S_mean - x, 0)
+  b = cov(payoffs_asian, W)/var(W)
+  
+  control = exp(-r*1)*payoffs_asian - b*(W)
+  
+  asian_price = mean(control)
+  asian_var = var(control)/nSamples
+  
+  Y = c(asian_price, asian_var)
+  return(Y)
+}
+
+f_quantile_control2 <- function(x) {
+  payoffs_quantile = pmax(S_median - x, 0)
+  b = cov(payoffs_quantile, W)/var(W)
+  
+  control = exp(-r*1)*payoffs_quantile- b*(W)
+  
+  quantile_price = mean(control)
+  quantile_var = var(control)/nSamples
+  
+  Y = c(quantile_price, quantile_var)
+  return(Y)
+}
+
+asian_control2 <- sapply(b, f_asian_control2)
+quantile_control2 <- sapply(b, f_quantile_control2)
+
+Asian_price_control2 = asian_control2[1,]
+Asian_var_control2 = asian_control2[2,]
+Quantile_price_control2 = quantile_control2[1,]
+Quantile_var_control2 = quantile_control2[2,]
+
+
+data.frame(Asian_price_control2, Asian_var_control2, Quantile_price_control2, Quantile_var_control2)
+```
+
+
+
+
+QUESTION 4
+
+```{r}
+rm(list = ls()) 
+nSamples = 10^6
+set.seed(56473)
+
+# Applying stratified sampling to estimate the integral to therefore estimate the constant C
+j = 1:nSamples
+U = runif(nSamples)
+
+I_MC = mean(2/(((U+j-1)/nSamples)^2 * sqrt(gamma(log(((U+j-1)/nSamples)^-2)+1))))
+c = 1/I_MC
+c
+```
+
+The following chunk is finding the minimum value of b (the constant for acceptance-rejection) such that it satisfies the inequality given
+
+```{r}
+A_R_function <- function(x){
+  y =(c*exp(x/2)/sqrt(gamma(x+1)) )* (gamma(1)*8^1*exp(x/8)/(x^(1-1)))
+  return(y)
+}
+
+# Finding the maximum of the function
+opt = optimize(A_R_function, lower = 0, upper = 430, maximum=TRUE)
+
+b = as.numeric(opt[1])
+b
+```
+
+```{r}
+# Generating a sample of candidates from the gamma(1,8) distribution
+X <- rgamma(nSamples, shape=1, scale =8)
+U <- runif(nSamples)
+
+# Carrying out acceptance_rejection criterion
+Y = (U <=  (c*exp(X/2)/sqrt(gamma(X+1)))/(b*exp(-X/8)/8)) * X
+Y= Y[!Y %in% c(0)]  # Removing the rejected values
+
+hist(Y, main = paste("Distribution"), xlab = "Sample", xlim = range(0:20), freq= FALSE, breaks = 100)
+Actual_acceptance_rate = length(Y)/nSamples
+Theoretical_acceptance_rate = 1/b
+
+cbind(Actual_acceptance_rate, Theoretical_acceptance_rate)
+```
+
+Comparing the sample moments to the MC moments to test if my method works. 
+
+```{r}
+U_moments <- runif(nSamples)
+
+# Calculating Monte-Carlo moments
+MC_Moment1 = mean((-4*c*log(U_moments))/(U_moments^2 * sqrt(gamma(-2*log(U_moments)+1))))
+
+MC_Moment2 = mean((8*c*log(U_moments)^2)/(U_moments^2 * sqrt(gamma(-2*log(U_moments)+1))))
+
+MC_Moment3= mean((-16*c*log(U_moments)^3)/(U_moments^2 * sqrt(gamma(-2*log(U_moments)+1))))
+
+MC_Moment4= mean((32*c*log(U_moments)^4)/(U_moments^2 * sqrt(gamma(-2*log(U_moments)+1))))
+
+
+MC_Moments = c(MC_Moment1,MC_Moment2,MC_Moment3,MC_Moment4)
+Sample_Moments = c(mean(Y), mean(Y^2), mean(Y^3), mean(Y^4))
+
+data.frame(MC_Moments,Sample_Moments)
+
+```
+
+As you can see, the sample moments are very similar to the MC moments therefore it is likely that my method works.
+
+QUESTION 5:
+
+```{r}
+rm(list = ls()) 
+nSamples = 10^7
+set.seed(56473)
+
+# Setting the probabilities for X
+p = c(0.1,0.3,0.2,0.3,0.1)
+
+# Defining a function to genreate a sample from the Random Sum
+sample_generator <- function(a) {
+N <- rpois(1,7)
+X <- sample(1:5, N, replace=TRUE, prob = p)  # Sampling from X
+Y = sum(X)
+
+return(Y)
+}
+
+Y = sapply(1:nSamples, sample_generator)
+hist(Y, main = paste("Distribution"), xlab = "Sample", xlim = range(0:70), freq= FALSE, breaks = 100)
+```
+COMPARING Moments
+
+```{r}
+Sample_Moments = c(mean(Y), var(Y))
+Theoretical_Moments = c(21, 72.8)
+
+cbind(Sample_Moments,Theoretical_Moments)
+```
+As you can see, the sample moments and theoretical moments are pretty similar therefore we can confirm that the sample is follows the Random Sum as desired.
+
+```{r}
+probability_sample = mean((Y>38))
+probability_sample
+```
+
+Now applying importance sampling to attempt to obtain better estimation of the probability.
+
+```{r}
+# The following is a function for calculating the optimal value of 'r'
+function_r <- function(r){
+  y = abs( 0.1*exp(1*r) + 0.6*exp(2*r) + 0.6*exp(3*r) + 1.2*exp(4*r) + 0.5*exp(5*r) -38/7)
+  return(y)
+}
+
+# Finding the minimum of the function on (0,5)
+opt = optimize(function_r, lower = 0, upper = 5, maximum=FALSE)
+r = as.numeric(opt[1])
+
+opt
+```
+
+```{r}
+theta = 0.1*exp(1*r) + 0.3*exp(2*r) + 0.2*exp(3*r) + 0.3*exp(4*r) + 0.1*exp(5*r) 
+
+# Defining the new distribution for X*
+p_star = c(0.1*exp(1*r) , 0.3*exp(2*r) , 0.2*exp(3*r) , 0.3*exp(4*r) , 0.1*exp(5*r)) / theta
+
+# Generating sample of Y*
+sample_generator_star <- function(a) {
+N_Star <- rpois(1,theta*7)
+X_Star <- sample(1:5, N_Star, replace=TRUE, prob = p_star)
+Y_Star = sum(X_Star)
+
+return(Y_Star)
+}
+
+Y_star = sapply(1:nSamples, sample_generator_star)
+
+probability_estimator = exp(7*(theta-1)) * exp(-Y_star*r) *(Y_star>38)
+
+probability_importance = mean(probability_estimator)
+
+cbind(probability_sample,probability_importance)
+```
+
+We can see that the probabilities are very similar as desired but the importance sampling is less wasteful and more accurate.
+

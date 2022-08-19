@@ -1,0 +1,335 @@
+---
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+QUESTION 1
+
+```{r}
+# I have cleared workspace at the start of each question to keep things tidy 
+rm(list = ls()) 
+set.seed(56473)
+
+nSamples = 10^6
+
+# I am going to use the most obvious variance reduction method first, antithetic variable
+U <- runif(nSamples)
+
+X = tanh(-log(U))
+Y = tanh(-log(1-U)) # Applying antithetic variable
+Z = (X+Y)/2 
+
+soln_MC = mean(X) # This is the standard MC solution without any variance reduction
+soln_antithetic = mean(Z) # This is the solution to the integral after applying the antithetic variable
+
+true_value = (pi-2)/2
+
+variance_MC = var(X)
+variance_antithetic = var(Z)
+```
+
+Calculating Confidence Intervals for each estimation
+
+```{r}
+MC_CI = c(soln_MC-1.96*sqrt(variance_MC)/sqrt(nSamples),soln_MC+1.96*sqrt(variance_MC)/sqrt(nSamples))
+Antithetic_CI = c(soln_antithetic-1.96*sqrt(variance_antithetic)/sqrt(nSamples),soln_antithetic+1.96*sqrt(variance_antithetic)/sqrt(nSamples))
+
+```
+The next chunk plots a graph of the estimated solution for different sample sizes. This is to show the effectiveness of antithetic variables and how close the approximations are to the true value.
+```{r}
+library(ggplot2)
+# The following functions calculates the mean of the first v sample for each of the methods
+f_X <- function(v) {
+  XX = mean(X[1:v])
+  return(XX)
+}
+
+f_Z <- function(v) {
+  ZZ = mean(Z[1:v])
+  return(ZZ)
+}
+
+x_seq = seq(5*10^5, 10^6, 1000) # Creates a sequence with an increment of 1000 starting at 500 000
+
+estimates_MC = sapply(x_seq, f_X)
+estimates_antithetic = sapply(x_seq, f_Z)
+
+estimate_dataset = data.frame(x_seq, estimates_MC, estimates_antithetic)
+
+# Code below uses the ggplot package to display the estimates for different sample sizes
+ggplot(data = estimate_dataset, aes(x = x_seq))+
+  geom_line(aes(y = estimates_MC, colour="Non Antithetic"))+
+  geom_line(aes(y = estimates_antithetic, colour="Antithetic"))+
+  geom_hline(aes(yintercept = true_value,colour="True Value"))+
+  labs(title = "Effect of different Variance Reduction Methods",
+       y = "Estimate",
+       x = "Sample Size")+
+  scale_color_manual(values = c("Non Antithetic"="red", "Antithetic"="blue", "True Value" = "green")) # Creates a legend
+
+```
+
+```{r}
+# This chunk shows a method combining stratified sampling and antithetic variable
+j = 1:nSamples
+
+X1 = tanh(-log((U+j-1)/nSamples))
+X2 = tanh(-log((j-U)/nSamples))
+
+Z2 = (X1+X2)/2
+
+soln_strat = mean(Z2)
+
+# It is very clear that the stratified sampling yields the most accurate solution by far
+data.frame(true_value, soln_MC, soln_antithetic,soln_strat)
+
+# However, identifying variance of stratified sample is not as easy as using the 'var' function
+data.frame(variance_MC, variance_antithetic)
+
+# The following shows the confidence intervals for the MC and Antithetic estimations
+data.frame(MC_CI,Antithetic_CI)
+```
+
+QUESTION 2
+
+```{r}
+rm(list = ls()) 
+set.seed(56473)
+
+nSamples = 10^6
+
+c = 2/(pi-2)  # This is the constant C used in my A-R method
+b = c(1,2,3)  # The different values of b I am interested in
+
+# The following function generates a sample for the distribution using A-R for your chosen value of b
+generator <- function(v) {
+  U <- runif(nSamples)
+  Y <- rexp(nSamples, v)
+
+  Y = Y*(U<tanh(v*Y)) # Only accepts Y if U<tanh(bY) 
+  Y = Y[!Y %in% c(0)] # Removes all the zeros
+
+  return(Y)
+}
+
+X = sapply(b, generator)
+
+# Here I am simply separating the 3 different distributions
+sample_b1 = unlist(X[1])
+sample_b2 = unlist(X[2])
+sample_b3 = unlist(X[3])
+
+mean_1 = mean(sample_b1)
+mean_2 = mean(sample_b2)
+mean_3 = mean(sample_b3)
+
+var_1 = var(sample_b1)
+var_2 = var(sample_b2)
+var_3 = var(sample_b3)
+
+actual_acceptance_rate_1 = length(sample_b1)/nSamples
+actual_acceptance_rate_2 = length(sample_b2)/nSamples
+actual_acceptance_rate_3 = length(sample_b3)/nSamples
+
+sample_mean = c(mean_1,mean_2,mean_3)
+sample_variance = c(var_1,var_2,var_3)
+sample_acceptance_rate = c(actual_acceptance_rate_1,actual_acceptance_rate_2,actual_acceptance_rate_3)
+
+acceptance_rate = 1/c
+
+data.frame(b,sample_mean,sample_variance, sample_acceptance_rate, acceptance_rate)
+
+# The following code plots the distribution so it is easy to see how the value of b affects the distribution
+hist(sample_b1, main = paste("Distribution when b=1"), xlab = "Sample", xlim = range(0:7), freq= FALSE, breaks = 100)
+hist(sample_b2, main = paste("Distribution when b=2"), xlab = "Sample", xlim = range(0:7), freq= FALSE, breaks = 100)
+hist(sample_b3, main = paste("Distribution when b=3"), xlab = "Sample", xlim = range(0:7), freq= FALSE, breaks = 100)
+
+# A quick trend you can spot is that higher b leads to the sample being smaller. It is less likely to obtain larger numbers. The peak of the pdf shifts to the left.
+```
+Here I calculate the mean and variance of the distribution using Monte-Carlo method and applying antithetic variable to obtain better estimates of the moments.
+```{r}
+# The following function calculates the moments of your choice of the distribution, although only tested for the first 2 moments.
+# I am combining stratified sampling and antithetic variables again
+moments <- function(b,v) {
+  U <- runif(nSamples)
+  j = 1:nSamples
+  
+  X = (2/(pi-2)) * tanh(-log((U+j-1)/nSamples)) * (-log((U+j-1)/nSamples)/b)^v
+  Y = (2/(pi-2)) * tanh(-log((j-U)/nSamples)) * (-log((j-U)/nSamples)/b)^v
+  Z = 0.5*(X+Y)
+  return(mean(Z))
+}
+
+# This calculates the mean and variance using MC
+Strat_Mean = sapply(b,moments,v=1)
+Strat_Variance = sapply(b, moments, v=2) - Strat_Mean^2
+
+data.frame(sample_mean, Strat_Mean, sample_variance, Strat_Variance)
+```
+
+QUESTION 3
+
+```{r}
+rm(list = ls()) 
+set.seed(56473)
+
+nSamples = 10^6
+
+# The following function repeats A-R until we obtain an accepted value. The reason I did this is because this specific case requires me to generate a sample of a fixed size
+A_R <- function(v) {
+  while (1) {
+    U <- runif(1)
+    Y <- rexp(1, 1)
+    
+    if (U<tanh(Y))
+    return(Y)
+  }
+}
+
+# Following function generates the poisson variable N first then uses this to determine how many Ys we must generate.
+RV_Generator <-function(x)  {
+  q <-sample(c(1,2),size=1)
+  N <-rpois(1,q)
+
+  Y <- sapply(1:N, A_R) 
+  S = sum(Y)
+
+  return(S)
+}
+
+S = sapply(1:nSamples, RV_Generator)
+
+mean = mean(S)
+variance = var(S)
+# Since the probability is equal to the expectation of the indicator function
+probability = sum(S>2.3)/nSamples
+
+cbind(mean, variance, probability)
+
+hist(S, main = paste("Distribution of S"), xlim = range(1:15), xlab = "Sample", breaks = 100)
+```
+
+             QUESTION 4
+
+```{r}
+rm(list = ls()) 
+set.seed(56473)
+
+# In this question, I have used the fact that the sum of the PDF equals 1 by definition. To approximate C, I decided to sum the probabilities for 0:200 and therefore use this to calculate C.
+nSamples = 10^6
+sample = 0:200  # This is the sample used for approximating C. We only need a small sample since the probability tends to zero very fast
+
+# The following function identifies if v is odd or even then applies the correct PDF.
+f_C <- function(v) {
+  X = (exp(-4)*4^v)/factorial(v)*(1-0.5*(v%%2==0))
+  return(X)
+}
+
+probabilities = sapply(sample, f_C)
+total_prob = sum(probabilities)
+
+# For the envelope I have used, I have taken the constant used in the A-R method to be equal to our approximated value of C
+C = 1/total_prob  
+
+```
+
+The next block uses the inverse transform method for a discrete r.v. to generate the sample instead. In general, inverse transform methods are preferred over A-R methods.
+
+```{r}
+# This function generates a sample using the inverse transform method for a discrete
+RV_generator <- function(v) {
+  j = 0
+  U <- runif(1)
+  p = 0.5*C*exp(-4)
+  b = p
+  X = j
+  while (U>b) {
+    p = p*(4/(j+1))*(0.5+1.5*(j %% 2 == 0)) 
+    # I have created this indicator function to adjust for the slight change in PDF depending on even or odd j
+    b = b + p
+    j = j+1
+    X = j
+  }
+  return(X)
+}
+
+Y <- sapply(1:10^6, RV_generator)
+mean = mean(Y)
+variance = var(Y)
+
+
+cbind(mean,variance)
+hist(Y, main = paste("Distribution"), xlim = range(0:20), xlab = "Sample", breaks = 100)
+```
+Testing whether algorithm works.
+
+```{r}
+Sample_proportions = head(prop.table(table(Y)))
+True_Probabilities = C*probabilities[1:6]
+data.frame(Sample_proportions, True_Probabilities)
+```
+
+             QUESTION 5
+
+```{r}
+rm(list = ls()) 
+set.seed(56473)
+
+nSamples = 10^5
+
+f5 <- function(k, N, a) {
+  X <- sample(1:100, k, replace=TRUE)
+  Y <- sample(1:100, N-k, replace=TRUE)
+  
+  # The following IF statement determines who is the selected candidate
+  if (max(Y)>max(X)){
+    winner = min(which(Y>max(X)))
+  } else  {
+    winner = N-k
+  }
+  
+  # The following identifies whether the selected candidate is the highest scoring candidate or not
+  indicator = as.numeric(Y[winner]==max(X,Y))
+  
+  return(indicator)
+}
+```
+
+The next block finds the optimal k
+
+```{r}
+k = 1:11
+X = c()
+
+for (i in k) {
+  X[i] = sum(sapply(1:nSamples, f5, k=i, N=12))
+}
+
+probability = X/nSamples
+
+max_probability = max(probability)
+optimal_k = which.max(probability)
+```
+
+The following block investigates the effects of changing the number of candidates
+
+```{r}
+# Lets now relax the value of N and fix k = optimal_k
+N = 10:18
+Y = c()
+
+for (i in N) {
+  Y[i-9] = sum(sapply(1:nSamples, f5, k=optimal_k, N=i))
+}
+
+probability_part2 = Y/nSamples
+
+max_probability_part2 = max(probability_part2)
+optimal_N = which.max(probability_part2) + 9
+
+# For optimal k and optimal N, the probability of choosing the correct candidate is...
+Optimal_probability = probability_part2[optimal_N-9]
+
+cbind(optimal_k, optimal_N, Optimal_probability)
+```
